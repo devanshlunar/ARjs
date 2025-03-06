@@ -40,70 +40,134 @@
         .inactive {
             background-color: #F44336;
         }
+        
+        #fix-position-btn {
+            position: fixed;
+            bottom: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            z-index: 1000;
+        }
+        
+        #reset-btn {
+            position: fixed;
+            bottom: 80px;
+            left: 50%;
+            transform: translateX(-50%);
+            background-color: #f44336;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            padding: 15px 32px;
+            text-align: center;
+            text-decoration: none;
+            display: inline-block;
+            font-size: 16px;
+            margin: 4px 2px;
+            cursor: pointer;
+            z-index: 1000;
+            display: none;
+        }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
     <!-- Debug Panel -->
     <div id="debug-panel">
-        <p>Version: No rotation animation</p>
-        <p><span id="marker-status" class="status inactive"></span>Marker Detected: <span id="marker-detected">No</span></p>
-        <p><span id="model-status" class="status inactive"></span>Model Placed (armarker1): <span id="model-placed">No</span></p>
+        <p>Version: Manual Positioning</p>
+        <p><span id="model-status" class="status inactive"></span>Model Placed: <span id="model-placed">No</span></p>
     </div>
     
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-        <!-- Create a marker with the pattern file -->
-        <a-marker type="pattern" url="assets/pattern-marker.patt" id="ar-marker">
-            <!-- Use GLTF model instead of a-box, no rotation animation -->
-            <a-entity 
-                gltf-model="assets/cube.gltf" 
-                position="0 0.5 0" 
-                scale="1 1 1"
-                rotation="0 0 0"
-                id="ar-cube">
-            </a-entity>
-        </a-marker>
+    <!-- Fix Position Button -->
+    <button id="fix-position-btn">Fix Position</button>
+    <button id="reset-btn">Reset Position</button>
+    
+    <!-- AR Scene with location-based setup -->
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
+        <!-- 3D model set to follow the camera initially -->
+        <a-entity id="ar-cube" 
+            gltf-model="assets/cube.gltf" 
+            position="0 0 -2" 
+            scale="1 1 1"
+            rotation="0 0 0">
+        </a-entity>
         
-        <!-- Add a camera entity -->
-        <a-entity camera></a-entity>
+        <!-- Camera with position tracking -->
+        <a-entity camera look-controls></a-entity>
     </a-scene>
     
     <script>
         // Debug elements
-        const markerDetectedText = document.getElementById('marker-detected');
-        const markerStatus = document.getElementById('marker-status');
         const modelPlacedText = document.getElementById('model-placed');
         const modelStatus = document.getElementById('model-status');
         
-        // Get the marker element
-        const marker = document.getElementById('ar-marker');
+        // Get the elements
         const cube = document.getElementById('ar-cube');
+        const fixPositionBtn = document.getElementById('fix-position-btn');
+        const resetBtn = document.getElementById('reset-btn');
+        const camera = document.querySelector('a-entity[camera]');
         
-        // Add event listeners for marker detection
-        marker.addEventListener('markerFound', function() {
-            console.log('Marker found!');
-            markerDetectedText.textContent = 'Yes';
-            markerStatus.classList.remove('inactive');
-            markerStatus.classList.add('active');
+        let isFixed = false;
+        
+        // Function to update the cube position in front of the camera
+        function updateCubePosition() {
+            if (isFixed) return;
             
-            // Update model status after a small delay to ensure it's actually rendered
-            setTimeout(() => {
-                modelPlacedText.textContent = 'Yes';
-                modelStatus.classList.remove('inactive');
-                modelStatus.classList.add('active');
-                console.log('Model placed!');
-            }, 500);
+            // Get camera position and rotation
+            const cameraEl = document.querySelector('[camera]');
+            const cameraPosition = cameraEl.object3D.position;
+            const cameraRotation = cameraEl.object3D.rotation;
+            const direction = new THREE.Vector3(0, 0, -2);
+            direction.applyQuaternion(cameraEl.object3D.quaternion);
+            
+            // Set the cube position 2 meters in front of the camera
+            cube.setAttribute('position', {
+                x: cameraPosition.x + direction.x,
+                y: cameraPosition.y + direction.y,
+                z: cameraPosition.z + direction.z
+            });
+        }
+        
+        // Fix position button click handler
+        fixPositionBtn.addEventListener('click', function() {
+            isFixed = true;
+            fixPositionBtn.style.display = 'none';
+            resetBtn.style.display = 'inline-block';
+            
+            // Update status
+            modelPlacedText.textContent = 'Yes (Fixed)';
+            modelStatus.classList.remove('inactive');
+            modelStatus.classList.add('active');
+            
+            console.log('Model position fixed');
         });
         
-        marker.addEventListener('markerLost', function() {
-            console.log('Marker lost!');
-            markerDetectedText.textContent = 'No';
-            markerStatus.classList.remove('active');
-            markerStatus.classList.add('inactive');
+        // Reset button click handler
+        resetBtn.addEventListener('click', function() {
+            isFixed = false;
+            fixPositionBtn.style.display = 'inline-block';
+            resetBtn.style.display = 'none';
             
-            modelPlacedText.textContent = 'No';
+            // Update status
+            modelPlacedText.textContent = 'No (Following)';
             modelStatus.classList.remove('active');
             modelStatus.classList.add('inactive');
+            
+            console.log('Model position reset - now following camera');
         });
+        
+        // Initial status
+        modelPlacedText.textContent = 'No (Following)';
         
         // Add model loading events
         cube.addEventListener('model-loaded', function() {
@@ -114,12 +178,10 @@
             console.log('Error loading model: ' + JSON.stringify(event.detail));
         });
         
-        // Display console logs on mobile devices too
-        window.onerror = function(message, source, lineno, colno, error) {
-            alert('Error: ' + message);
-            return true;
-        };
+        // Set up continuous position updates
+        setInterval(updateCubePosition, 50); // Update every 50ms
         
+        // Display console logs on the debug panel
         console.log = function(message) {
             if (typeof message === 'object') {
                 message = JSON.stringify(message);
@@ -137,7 +199,7 @@
         };
         
         // Initial debug message
-        console.log('AR app initialized. Point camera at marker...');
+        console.log('AR app initialized. Position the cube and click Fix Position.');
     </script>
 </body>
 </html> 
