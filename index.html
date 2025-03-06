@@ -84,7 +84,7 @@
 <body style="margin: 0; overflow: hidden;">
     <!-- Debug Panel -->
     <div id="debug-panel">
-        <p>Version: World-fixed Positioning</p>
+        <p>Version: Simplified Fixed Positioning</p>
         <p><span id="model-status" class="status inactive"></span>Model Placed: <span id="model-placed">No</span></p>
     </div>
     
@@ -92,17 +92,14 @@
     <button id="fix-position-btn">Fix Position</button>
     <button id="reset-btn">Reset Position</button>
     
-    <!-- AR Scene with improved tracking -->
+    <!-- AR Scene with simplified approach -->
     <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
-        <!-- Initially hidden cube container -->
-        <a-entity id="model-container" visible="true" position="0 0 -2">
-            <!-- 3D model with reduced scale -->
-            <a-entity id="ar-cube" 
-                gltf-model="assets/cube.gltf" 
-                position="0 0 0" 
-                scale="0.3 0.3 0.3"
-                rotation="0 0 0">
-            </a-entity>
+        <!-- 3D model entity that follows camera initially -->
+        <a-entity id="ar-cube" 
+            gltf-model="assets/cube.gltf" 
+            position="0 0 -2" 
+            scale="0.3 0.3 0.3"
+            rotation="0 0 0">
         </a-entity>
         
         <!-- Camera with position tracking -->
@@ -113,17 +110,43 @@
         // Debug elements
         const modelPlacedText = document.getElementById('model-placed');
         const modelStatus = document.getElementById('model-status');
+        const debugPanel = document.getElementById('debug-panel');
         
         // Get the elements
-        const modelContainer = document.getElementById('model-container');
         const cube = document.getElementById('ar-cube');
         const fixPositionBtn = document.getElementById('fix-position-btn');
         const resetBtn = document.getElementById('reset-btn');
-        const scene = document.querySelector('a-scene');
         
         let isFixed = false;
-        let worldPosition = null;
-        let worldRotation = null;
+        let fixedPosition = null;
+        let fixedRotation = null;
+        
+        // A more reliable console.log function
+        const originalLog = console.log;
+        console.log = function(message) {
+            // Maintain original console functionality
+            originalLog.apply(console, arguments);
+            
+            // Format the message for the debug panel
+            let displayMessage = message;
+            if (typeof message === 'object') {
+                try {
+                    displayMessage = JSON.stringify(message);
+                } catch (e) {
+                    displayMessage = "[Object]";
+                }
+            }
+            
+            const logMessage = document.createElement('p');
+            logMessage.textContent = displayMessage;
+            debugPanel.appendChild(logMessage);
+            
+            // Keep only the last 5 messages
+            const messages = debugPanel.getElementsByTagName('p');
+            if (messages.length > 7) { // 2 status lines + 5 log messages
+                debugPanel.removeChild(messages[2]); // Remove the oldest log
+            }
+        };
         
         // Function to update the cube position in front of the camera
         function updateCubePosition() {
@@ -131,89 +154,69 @@
             
             // Get camera position and rotation
             const camera = document.querySelector('[camera]');
+            const cameraPosition = camera.object3D.position;
+            const cameraRotation = camera.object3D.rotation;
             
-            // Get position 2m in front of camera
+            // Calculate position in front of camera
             const direction = new THREE.Vector3(0, 0, -2);
             direction.applyQuaternion(camera.object3D.quaternion);
             
-            modelContainer.setAttribute('position', {
-                x: camera.object3D.position.x + direction.x,
-                y: camera.object3D.position.y + direction.y,
-                z: camera.object3D.position.z + direction.z
+            // Update cube position
+            cube.setAttribute('position', {
+                x: cameraPosition.x + direction.x,
+                y: cameraPosition.y + direction.y,
+                z: cameraPosition.z + direction.z
             });
             
-            // Make the model face the camera
-            const lookAtPos = new THREE.Vector3();
-            camera.object3D.getWorldPosition(lookAtPos);
-            modelContainer.object3D.lookAt(lookAtPos);
+            // Make cube face the camera
+            cube.object3D.lookAt(cameraPosition);
         }
         
         // Fix position button click handler
         fixPositionBtn.addEventListener('click', function() {
-            isFixed = true;
-            fixPositionBtn.style.display = 'none';
-            resetBtn.style.display = 'inline-block';
-            
-            // Get current world position and rotation
-            const containerObj = modelContainer.object3D;
-            worldPosition = new THREE.Vector3();
-            containerObj.getWorldPosition(worldPosition);
-            worldRotation = containerObj.quaternion.clone();
-            
-            // Create a new entity at world position
-            const fixedAnchor = document.createElement('a-entity');
-            fixedAnchor.id = 'fixed-anchor';
-            fixedAnchor.setAttribute('position', {
-                x: worldPosition.x,
-                y: worldPosition.y,
-                z: worldPosition.z
-            });
-            
-            // Create quaternion output string
-            const quaternion = containerObj.quaternion;
-            fixedAnchor.setAttribute('rotation', {
-                x: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).x),
-                y: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).y),
-                z: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).z)
-            });
-            
-            // Move the cube to this new fixed anchor
-            scene.appendChild(fixedAnchor);
-            modelContainer.removeAttribute('position');
-            modelContainer.removeAttribute('rotation');
-            fixedAnchor.appendChild(modelContainer);
-            
-            // Update status
-            modelPlacedText.textContent = 'Yes (Fixed in World)';
-            modelStatus.classList.remove('inactive');
-            modelStatus.classList.add('active');
-            
-            console.log('Model fixed in world space at:', worldPosition);
+            try {
+                isFixed = true;
+                fixPositionBtn.style.display = 'none';
+                resetBtn.style.display = 'inline-block';
+                
+                // Get and store current position and rotation
+                const currentPosition = cube.getAttribute('position');
+                const currentRotation = cube.getAttribute('rotation');
+                
+                fixedPosition = { ...currentPosition };
+                fixedRotation = { ...currentRotation };
+                
+                console.log('Position fixed at:', fixedPosition);
+                console.log('Rotation fixed at:', fixedRotation);
+                
+                // Update status
+                modelPlacedText.textContent = 'Yes (Fixed)';
+                modelStatus.classList.remove('inactive');
+                modelStatus.classList.add('active');
+            } catch (error) {
+                console.log('Error fixing position: ' + error.message);
+            }
         });
         
         // Reset button click handler
         resetBtn.addEventListener('click', function() {
-            isFixed = false;
-            fixPositionBtn.style.display = 'inline-block';
-            resetBtn.style.display = 'none';
-            
-            // Remove fixed anchor and return cube to scene
-            const fixedAnchor = document.getElementById('fixed-anchor');
-            if (fixedAnchor) {
-                scene.removeChild(fixedAnchor);
-                scene.appendChild(modelContainer);
+            try {
+                isFixed = false;
+                fixPositionBtn.style.display = 'inline-block';
+                resetBtn.style.display = 'none';
                 
-                // Reset cube position to camera view
-                modelContainer.setAttribute('position', '0 0 -2');
-                modelContainer.setAttribute('rotation', '0 0 0');
+                fixedPosition = null;
+                fixedRotation = null;
+                
+                // Update status
+                modelPlacedText.textContent = 'No (Following)';
+                modelStatus.classList.remove('active');
+                modelStatus.classList.add('inactive');
+                
+                console.log('Position reset - now following camera');
+            } catch (error) {
+                console.log('Error resetting position: ' + error.message);
             }
-            
-            // Update status
-            modelPlacedText.textContent = 'No (Following)';
-            modelStatus.classList.remove('active');
-            modelStatus.classList.add('inactive');
-            
-            console.log('Model position reset - now following camera');
         });
         
         // Initial status
@@ -230,23 +233,6 @@
         
         // Set up continuous position updates when not fixed
         setInterval(updateCubePosition, 50); // Update every 50ms
-        
-        // Display console logs on the debug panel
-        console.log = function(message) {
-            if (typeof message === 'object') {
-                message = JSON.stringify(message);
-            }
-            const debugPanel = document.getElementById('debug-panel');
-            const logMessage = document.createElement('p');
-            logMessage.textContent = message;
-            debugPanel.appendChild(logMessage);
-            
-            // Keep only the last 5 messages
-            const messages = debugPanel.getElementsByTagName('p');
-            if (messages.length > 7) { // 2 status lines + 5 log messages
-                debugPanel.removeChild(messages[2]); // Remove the oldest log (after the 2 status lines)
-            }
-        };
         
         // Initial debug message
         console.log('AR app initialized. Position the cube and click Fix Position.');
