@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Simple AR Cube</title>
     <!-- Import A-Frame and AR.js libraries -->
-    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
     <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
     <style>
         body {
@@ -84,7 +84,7 @@
 <body style="margin: 0; overflow: hidden;">
     <!-- Debug Panel -->
     <div id="debug-panel">
-        <p>Version: Manual Positioning</p>
+        <p>Version: World-fixed Positioning</p>
         <p><span id="model-status" class="status inactive"></span>Model Placed: <span id="model-placed">No</span></p>
     </div>
     
@@ -92,14 +92,17 @@
     <button id="fix-position-btn">Fix Position</button>
     <button id="reset-btn">Reset Position</button>
     
-    <!-- AR Scene with location-based setup -->
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
-        <!-- 3D model set to follow the camera initially -->
-        <a-entity id="ar-cube" 
-            gltf-model="assets/cube.gltf" 
-            position="0 0 -2" 
-            scale="1 1 1"
-            rotation="0 0 0">
+    <!-- AR Scene with improved tracking -->
+    <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
+        <!-- Initially hidden cube container -->
+        <a-entity id="model-container" visible="true" position="0 0 -2">
+            <!-- 3D model with reduced scale -->
+            <a-entity id="ar-cube" 
+                gltf-model="assets/cube.gltf" 
+                position="0 0 0" 
+                scale="0.3 0.3 0.3"
+                rotation="0 0 0">
+            </a-entity>
         </a-entity>
         
         <!-- Camera with position tracking -->
@@ -112,30 +115,37 @@
         const modelStatus = document.getElementById('model-status');
         
         // Get the elements
+        const modelContainer = document.getElementById('model-container');
         const cube = document.getElementById('ar-cube');
         const fixPositionBtn = document.getElementById('fix-position-btn');
         const resetBtn = document.getElementById('reset-btn');
-        const camera = document.querySelector('a-entity[camera]');
+        const scene = document.querySelector('a-scene');
         
         let isFixed = false;
+        let worldPosition = null;
+        let worldRotation = null;
         
         // Function to update the cube position in front of the camera
         function updateCubePosition() {
             if (isFixed) return;
             
             // Get camera position and rotation
-            const cameraEl = document.querySelector('[camera]');
-            const cameraPosition = cameraEl.object3D.position;
-            const cameraRotation = cameraEl.object3D.rotation;
-            const direction = new THREE.Vector3(0, 0, -2);
-            direction.applyQuaternion(cameraEl.object3D.quaternion);
+            const camera = document.querySelector('[camera]');
             
-            // Set the cube position 2 meters in front of the camera
-            cube.setAttribute('position', {
-                x: cameraPosition.x + direction.x,
-                y: cameraPosition.y + direction.y,
-                z: cameraPosition.z + direction.z
+            // Get position 2m in front of camera
+            const direction = new THREE.Vector3(0, 0, -2);
+            direction.applyQuaternion(camera.object3D.quaternion);
+            
+            modelContainer.setAttribute('position', {
+                x: camera.object3D.position.x + direction.x,
+                y: camera.object3D.position.y + direction.y,
+                z: camera.object3D.position.z + direction.z
             });
+            
+            // Make the model face the camera
+            const lookAtPos = new THREE.Vector3();
+            camera.object3D.getWorldPosition(lookAtPos);
+            modelContainer.object3D.lookAt(lookAtPos);
         }
         
         // Fix position button click handler
@@ -144,12 +154,41 @@
             fixPositionBtn.style.display = 'none';
             resetBtn.style.display = 'inline-block';
             
+            // Get current world position and rotation
+            const containerObj = modelContainer.object3D;
+            worldPosition = new THREE.Vector3();
+            containerObj.getWorldPosition(worldPosition);
+            worldRotation = containerObj.quaternion.clone();
+            
+            // Create a new entity at world position
+            const fixedAnchor = document.createElement('a-entity');
+            fixedAnchor.id = 'fixed-anchor';
+            fixedAnchor.setAttribute('position', {
+                x: worldPosition.x,
+                y: worldPosition.y,
+                z: worldPosition.z
+            });
+            
+            // Create quaternion output string
+            const quaternion = containerObj.quaternion;
+            fixedAnchor.setAttribute('rotation', {
+                x: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).x),
+                y: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).y),
+                z: THREE.Math.radToDeg(new THREE.Euler().setFromQuaternion(quaternion).z)
+            });
+            
+            // Move the cube to this new fixed anchor
+            scene.appendChild(fixedAnchor);
+            modelContainer.removeAttribute('position');
+            modelContainer.removeAttribute('rotation');
+            fixedAnchor.appendChild(modelContainer);
+            
             // Update status
-            modelPlacedText.textContent = 'Yes (Fixed)';
+            modelPlacedText.textContent = 'Yes (Fixed in World)';
             modelStatus.classList.remove('inactive');
             modelStatus.classList.add('active');
             
-            console.log('Model position fixed');
+            console.log('Model fixed in world space at:', worldPosition);
         });
         
         // Reset button click handler
@@ -157,6 +196,17 @@
             isFixed = false;
             fixPositionBtn.style.display = 'inline-block';
             resetBtn.style.display = 'none';
+            
+            // Remove fixed anchor and return cube to scene
+            const fixedAnchor = document.getElementById('fixed-anchor');
+            if (fixedAnchor) {
+                scene.removeChild(fixedAnchor);
+                scene.appendChild(modelContainer);
+                
+                // Reset cube position to camera view
+                modelContainer.setAttribute('position', '0 0 -2');
+                modelContainer.setAttribute('rotation', '0 0 0');
+            }
             
             // Update status
             modelPlacedText.textContent = 'No (Following)';
@@ -178,7 +228,7 @@
             console.log('Error loading model: ' + JSON.stringify(event.detail));
         });
         
-        // Set up continuous position updates
+        // Set up continuous position updates when not fixed
         setInterval(updateCubePosition, 50); // Update every 50ms
         
         // Display console logs on the debug panel
