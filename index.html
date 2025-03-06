@@ -52,14 +52,15 @@
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
         <!-- Create a marker with the pattern file -->
         <a-marker type="pattern" url="pattern-marker.patt" id="ar-marker">
-            <!-- Create a rotating cube -->
-            <a-box position="0 1 0" 
-                   color="#4CC3D9" 
-                   rotation="0 0 0" 
-                   scale="1 1 1"
-                   animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear;"
-                   id="ar-cube">
-            </a-box>
+            <!-- Use GLTF model instead of a-box -->
+            <a-entity 
+                gltf-model="./cube.gltf" 
+                position="0 0.5 0" 
+                scale="1 1 1"
+                rotation="0 0 0"
+                animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear;"
+                id="ar-cube">
+            </a-entity>
         </a-marker>
         
         <!-- Add a camera entity -->
@@ -102,6 +103,15 @@
             modelPlacedText.textContent = 'No';
             modelStatus.classList.remove('active');
             modelStatus.classList.add('inactive');
+        });
+        
+        // Add model loading events
+        cube.addEventListener('model-loaded', function() {
+            console.log('GLTF model loaded successfully');
+        });
+        
+        cube.addEventListener('model-error', function(event) {
+            console.log('Error loading model: ' + JSON.stringify(event.detail));
         });
         
         // Display console logs on mobile devices too
