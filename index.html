@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Simple AR Cube</title>
+    <!-- Import A-Frame and AR.js libraries -->
+    <script src="https://aframe.io/releases/1.2.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+        }
+    </style>
+</head>
+<body style="margin: 0; overflow: hidden;">
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+        <!-- Create a marker with patter-hiro.patt (a default pattern provided by AR.js) -->
+        <a-marker type="pattern" url="pattern-marker.patt">
+            <!-- Create a rotating cube -->
+            <a-box position="0 1 0" 
+                   color="#4CC3D9" 
+                   rotation="0 0 0" 
+                   scale="1 1 1"
+                   animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear;">
+            </a-box>
+        </a-marker>
+        
+        <!-- Add a camera entity -->
+        <a-entity camera></a-entity>
+    </a-scene>
+</body>
+</html> 
