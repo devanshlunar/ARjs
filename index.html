@@ -10,189 +10,20 @@
     <style>
         body {
             margin: 0;
-            overflow: hidden;
-        }
-        
-        #debug-panel {
-            position: fixed;
-            top: 0;
-            left: 0;
-            background-color: rgba(0, 0, 0, 0.7);
-            color: white;
-            padding: 10px;
-            font-family: monospace;
-            z-index: 999;
-            width: 200px;
-        }
-        
-        .status {
-            display: inline-block;
-            width: 10px;
-            height: 10px;
-            border-radius: 50%;
-            margin-right: 10px;
-        }
-        
-        .active {
-            background-color: #4CAF50;
-        }
-        
-        .inactive {
-            background-color: #F44336;
-        }
-        
-        #fix-position-btn {
-            position: fixed;
-            bottom: 20px;
-            left: 50%;
-            transform: translateX(-50%);
-            padding: 15px 32px;
-            font-size: 16px;
-            background: #4CAF50;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            z-index: 1000;
-        }
-        
-        #reset-btn {
-            position: fixed;
-            bottom: 80px;
-            left: 50%;
-            transform: translateX(-50%);
-            background-color: #f44336;
-            color: white;
-            border: none;
-            border-radius: 5px;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
-            z-index: 1000;
-            display: none;
         }
     </style>
 </head>
-<body style="margin: 0; overflow: hidden;">
-    <!-- Debug Panel -->
-    <div id="debug-panel">
-        <p>Version: Simplified Fixed Positioning</p>
-        <p><span id="model-status" class="status inactive"></span>Model Placed: <span id="model-placed">No</span></p>
-    </div>
-    
-    <!-- Fix Position Button -->
-    <button id="fix-position-btn">Fix Position</button>
-    <button id="reset-btn">Reset Position</button>
-    
-    <!-- AR Scene with simplified approach -->
-    <a-scene embedded vr-mode-ui="enabled: false" arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;">
-        <!-- 3D model entity that follows camera initially -->
-        <a-entity id="ar-cube" 
+<body>
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
+        <button onclick="window.location.href='marker.html'">Merker test</button>
+        <!-- Static 3D model fixed in space -->
+        <a-entity 
             gltf-model="assets/cube.gltf" 
-            position="0 0 -1" 
+            position="0 0 -1.5" 
             scale="0.2 0.2 0.2">
         </a-entity>
         
-        <!-- Camera with position tracking -->
         <a-camera></a-camera>
     </a-scene>
-    <script>
-        // Debug elements
-        const modelPlacedText = document.getElementById('model-placed');
-        const modelStatus = document.getElementById('model-status');
-        const debugPanel = document.getElementById('debug-panel');
-        
-        // Get the elements
-        const cube = document.getElementById('ar-cube');
-        const fixButton = document.getElementById('fix-position-btn');
-        const resetBtn = document.getElementById('reset-btn');
-        
-        let isFixed = false;
-        let fixedPosition = null;
-        let fixedRotation = null;
-        
-        // A more reliable console.log function
-        const originalLog = console.log;
-        console.log = function(message) {
-            // Maintain original console functionality
-            originalLog.apply(console, arguments);
-            
-            // Format the message for the debug panel
-            let displayMessage = message;
-            if (typeof message === 'object') {
-                try {
-                    displayMessage = JSON.stringify(message);
-                } catch (e) {
-                    displayMessage = "[Object]";
-                }
-            }
-            
-            const logMessage = document.createElement('p');
-            logMessage.textContent = displayMessage;
-            debugPanel.appendChild(logMessage);
-            
-            // Keep only the last 5 messages
-            const messages = debugPanel.getElementsByTagName('p');
-            if (messages.length > 7) { // 2 status lines + 5 log messages
-                debugPanel.removeChild(messages[2]); // Remove the oldest log
-            }
-        };
-        
-        function updatePosition() {
-            if (!isFixed) {
-                // Keep the cube 1 meter in front of the camera
-                cube.setAttribute('position', '0 0 -1');
-            }
-        }
-        
-        // Fix position button click handler
-        fixButton.addEventListener('click', () => {
-            isFixed = !isFixed;
-            fixButton.textContent = isFixed ? 'Reset Position' : 'Fix Position';
-            fixButton.style.background = isFixed ? '#f44336' : '#4CAF50';
-        });
-        
-        // Reset button click handler
-        resetBtn.addEventListener('click', function() {
-            try {
-                isFixed = false;
-                fixButton.textContent = 'Fix Position';
-                fixButton.style.background = '#4CAF50';
-                
-                fixedPosition = null;
-                fixedRotation = null;
-                
-                // Update status
-                modelPlacedText.textContent = 'No (Following)';
-                modelStatus.classList.remove('active');
-                modelStatus.classList.add('inactive');
-                
-                console.log('Position reset - now following camera');
-            } catch (error) {
-                console.log('Error resetting position: ' + error.message);
-            }
-        });
-        
-        // Initial status
-        modelPlacedText.textContent = 'No (Following)';
-        
-        // Add model loading events
-        cube.addEventListener('model-loaded', function() {
-            console.log('GLTF model loaded successfully');
-        });
-        
-        cube.addEventListener('model-error', function(event) {
-            console.log('Error loading model: ' + JSON.stringify(event.detail));
-        });
-        
-        // Set up continuous position updates when not fixed
-        setInterval(updatePosition, 33); // Update every 33ms
-        
-        // Initial debug message
-        console.log('AR app initialized. Position the cube and click Fix Position.');
-    </script>
 </body>
 </html> 
