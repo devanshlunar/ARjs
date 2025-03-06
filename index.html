@@ -46,17 +46,12 @@
             bottom: 20px;
             left: 50%;
             transform: translateX(-50%);
-            background-color: #4CAF50;
+            padding: 15px 32px;
+            font-size: 16px;
+            background: #4CAF50;
             color: white;
             border: none;
             border-radius: 5px;
-            padding: 15px 32px;
-            text-align: center;
-            text-decoration: none;
-            display: inline-block;
-            font-size: 16px;
-            margin: 4px 2px;
-            cursor: pointer;
             z-index: 1000;
         }
         
@@ -97,15 +92,13 @@
         <!-- 3D model entity that follows camera initially -->
         <a-entity id="ar-cube" 
             gltf-model="assets/cube.gltf" 
-            position="0 0 -2" 
-            scale="0.3 0.3 0.3"
-            rotation="0 0 0">
+            position="0 0 -1" 
+            scale="0.2 0.2 0.2">
         </a-entity>
         
         <!-- Camera with position tracking -->
-        <a-entity camera look-controls></a-entity>
+        <a-camera></a-camera>
     </a-scene>
-    
     <script>
         // Debug elements
         const modelPlacedText = document.getElementById('model-placed');
@@ -114,7 +107,7 @@
         
         // Get the elements
         const cube = document.getElementById('ar-cube');
-        const fixPositionBtn = document.getElementById('fix-position-btn');
+        const fixButton = document.getElementById('fix-position-btn');
         const resetBtn = document.getElementById('reset-btn');
         
         let isFixed = false;
@@ -148,62 +141,26 @@
             }
         };
         
-        // Function to update the cube position in front of the camera
-        function updateCubePosition() {
-            if (isFixed) return;
-            
-            // Get camera position and rotation
-            const camera = document.querySelector('[camera]');
-            const cameraPosition = camera.object3D.position;
-            const cameraRotation = camera.object3D.rotation;
-            
-            // Calculate position in front of camera
-            const direction = new THREE.Vector3(0, 0, -2);
-            direction.applyQuaternion(camera.object3D.quaternion);
-            
-            // Update cube position
-            cube.setAttribute('position', {
-                x: cameraPosition.x + direction.x,
-                y: cameraPosition.y + direction.y,
-                z: cameraPosition.z + direction.z
-            });
-            
-            // Make cube face the camera
-            cube.object3D.lookAt(cameraPosition);
+        function updatePosition() {
+            if (!isFixed) {
+                // Keep the cube 1 meter in front of the camera
+                cube.setAttribute('position', '0 0 -1');
+            }
         }
         
         // Fix position button click handler
-        fixPositionBtn.addEventListener('click', function() {
-            try {
-                isFixed = true;
-                fixPositionBtn.style.display = 'none';
-                resetBtn.style.display = 'inline-block';
-                
-                // Get and store current position and rotation
-                const currentPosition = cube.getAttribute('position');
-                const currentRotation = cube.getAttribute('rotation');
-                
-                fixedPosition = { ...currentPosition };
-                fixedRotation = { ...currentRotation };
-                
-                console.log('Position fixed at:', fixedPosition);
-                console.log('Rotation fixed at:', fixedRotation);
-                
-                // Update status
-                modelPlacedText.textContent = 'Yes (Fixed)';
-                modelStatus.classList.remove('inactive');
-                modelStatus.classList.add('active');
-            } catch (error) {
-                console.log('Error fixing position: ' + error.message);
-            }
+        fixButton.addEventListener('click', () => {
+            isFixed = !isFixed;
+            fixButton.textContent = isFixed ? 'Reset Position' : 'Fix Position';
+            fixButton.style.background = isFixed ? '#f44336' : '#4CAF50';
         });
         
         // Reset button click handler
         resetBtn.addEventListener('click', function() {
             try {
                 isFixed = false;
-                fixPositionBtn.style.display = 'inline-block';
-                resetBtn.style.display = 'none';
+                fixButton.textContent = 'Fix Position';
+                fixButton.style.background = '#4CAF50';
                 
                 fixedPosition = null;
                 fixedRotation = null;
@@ -232,7 +189,7 @@
         });
         
         // Set up continuous position updates when not fixed
-        setInterval(updateCubePosition, 50); // Update every 50ms
+        setInterval(updatePosition, 33); // Update every 33ms
         
         // Initial debug message
         console.log('AR app initialized. Position the cube and click Fix Position.');
