@@ -12,23 +12,122 @@
             margin: 0;
             overflow: hidden;
         }
+        
+        #debug-panel {
+            position: fixed;
+            top: 0;
+            left: 0;
+            background-color: rgba(0, 0, 0, 0.7);
+            color: white;
+            padding: 10px;
+            font-family: monospace;
+            z-index: 999;
+            width: 200px;
+        }
+        
+        .status {
+            display: inline-block;
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            margin-right: 10px;
+        }
+        
+        .active {
+            background-color: #4CAF50;
+        }
+        
+        .inactive {
+            background-color: #F44336;
+        }
     </style>
 </head>
 <body style="margin: 0; overflow: hidden;">
+    <!-- Debug Panel -->
+    <div id="debug-panel">
+        <p><span id="marker-status" class="status inactive"></span>Marker Detected: <span id="marker-detected">No</span></p>
+        <p><span id="model-status" class="status inactive"></span>Model Placed: <span id="model-placed">No</span></p>
+    </div>
+    
     <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-        <!-- Create a marker with patter-hiro.patt (a default pattern provided by AR.js) -->
-        <a-marker type="pattern" url="pattern-marker.patt">
+        <!-- Create a marker with the pattern file -->
+        <a-marker type="pattern" url="pattern-marker.patt" id="ar-marker">
             <!-- Create a rotating cube -->
             <a-box position="0 1 0" 
                    color="#4CC3D9" 
                    rotation="0 0 0" 
                    scale="1 1 1"
-                   animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear;">
+                   animation="property: rotation; to: 0 360 0; loop: true; dur: 5000; easing: linear;"
+                   id="ar-cube">
             </a-box>
         </a-marker>
         
         <!-- Add a camera entity -->
         <a-entity camera></a-entity>
     </a-scene>
+    
+    <script>
+        // Debug elements
+        const markerDetectedText = document.getElementById('marker-detected');
+        const markerStatus = document.getElementById('marker-status');
+        const modelPlacedText = document.getElementById('model-placed');
+        const modelStatus = document.getElementById('model-status');
+        
+        // Get the marker element
+        const marker = document.getElementById('ar-marker');
+        const cube = document.getElementById('ar-cube');
+        
+        // Add event listeners for marker detection
+        marker.addEventListener('markerFound', function() {
+            console.log('Marker found!');
+            markerDetectedText.textContent = 'Yes';
+            markerStatus.classList.remove('inactive');
+            markerStatus.classList.add('active');
+            
+            // Update model status after a small delay to ensure it's actually rendered
+            setTimeout(() => {
+                modelPlacedText.textContent = 'Yes';
+                modelStatus.classList.remove('inactive');
+                modelStatus.classList.add('active');
+                console.log('Model placed!');
+            }, 500);
+        });
+        
+        marker.addEventListener('markerLost', function() {
+            console.log('Marker lost!');
+            markerDetectedText.textContent = 'No';
+            markerStatus.classList.remove('active');
+            markerStatus.classList.add('inactive');
+            
+            modelPlacedText.textContent = 'No';
+            modelStatus.classList.remove('active');
+            modelStatus.classList.add('inactive');
+        });
+        
+        // Display console logs on mobile devices too
+        window.onerror = function(message, source, lineno, colno, error) {
+            alert('Error: ' + message);
+            return true;
+        };
+        
+        console.log = function(message) {
+            if (typeof message === 'object') {
+                message = JSON.stringify(message);
+            }
+            const debugPanel = document.getElementById('debug-panel');
+            const logMessage = document.createElement('p');
+            logMessage.textContent = message;
+            debugPanel.appendChild(logMessage);
+            
+            // Keep only the last 5 messages
+            const messages = debugPanel.getElementsByTagName('p');
+            if (messages.length > 7) { // 2 status lines + 5 log messages
+                debugPanel.removeChild(messages[2]); // Remove the oldest log (after the 2 status lines)
+            }
+        };
+        
+        // Initial debug message
+        console.log('AR app initialized. Point camera at marker...');
+    </script>
 </body>
 </html> 
