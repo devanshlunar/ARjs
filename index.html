@@ -45,14 +45,15 @@
 <body style="margin: 0; overflow: hidden;">
     <!-- Debug Panel -->
     <div id="debug-panel">
-        <p>Version: No rotation animation</p>
+        <p>Version: Stabilized model</p>
         <p><span id="marker-status" class="status inactive"></span>Marker Detected: <span id="marker-detected">No</span></p>
         <p><span id="model-status" class="status inactive"></span>Model Placed (armarker): <span id="model-placed">No</span></p>
     </div>
     
-    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false;">
-        <!-- Create a marker with the pattern file -->
-        <a-marker type="pattern" url="assets/pattern-marker.patt" id="ar-marker">
+    <!-- Modified AR.js settings for stability -->
+    <a-scene embedded arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3; patternRatio: 0.75; sourceWidth:1280; sourceHeight:960; displayWidth: 1280; displayHeight: 960;">
+        <!-- Create a marker with the pattern file and smoothing -->
+        <a-marker type="pattern" url="assets/pattern-marker.patt" id="ar-marker" smooth="true" smoothCount="10" smoothTolerance="0.01" smoothThreshold="5">
             <!-- Use GLTF model instead of a-box, no rotation animation -->
             <a-entity 
                 gltf-model="assets/cube.gltf" 
