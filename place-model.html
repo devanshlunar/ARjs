@@ -5,20 +5,19 @@
     <meta http-equiv='X-UA-Compatible' content='IE=edge'>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
     <title>AR.js - Fixed Model v2.0</title>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/build/three.min.js"></script>
-    <script src="https://cdn.jsdelivr.net/npm/three@0.132.2/examples/js/loaders/GLTFLoader.js"></script>
+    
+    <!-- AR.js and A-Frame libraries -->
+    <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    
     <style>
         body {
             margin: 0;
             overflow: hidden;
             font-family: Arial, sans-serif;
         }
-        #canvas {
-            position: absolute;
-            width: 100%;
-            height: 100%;
-            top: 0;
-            left: 0;
+        .a-enter-vr {
+            display: none;
         }
         .buttons {
             position: absolute;
@@ -47,7 +46,6 @@
             display: flex;
             justify-content: center;
             z-index: 10;
-            display: none;
         }
         .title {
             position: absolute;
@@ -73,33 +71,49 @@
             padding: 5px 0;
             z-index: 10;
         }
-        .error-message {
+        .loading-screen {
             position: absolute;
-            top: 50%;
-            left: 50%;
-            transform: translate(-50%, -50%);
-            background-color: rgba(255, 255, 255, 0.9);
-            padding: 20px;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background-color: rgba(0, 0, 0, 0.8);
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            z-index: 999;
+            color: white;
+        }
+        .loading-bar {
+            width: 80%;
+            max-width: 300px;
+            height: 20px;
+            background-color: #333;
             border-radius: 10px;
-            max-width: 80%;
-            text-align: center;
-            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-            display: none;
+            margin-top: 20px;
+            overflow: hidden;
         }
-        .error-message h2 {
-            color: #d32f2f;
-            margin-top: 0;
-        }
-        .error-message p {
-            margin-bottom: 15px;
+        .loading-progress {
+            height: 100%;
+            background-color: #4CAF50;
+            width: 0%;
+            transition: width 0.3s;
         }
     </style>
 </head>
 
 <body>
-    <canvas id="canvas"></canvas>
     <div class="title">AR.js - Fixed Model v2.0</div>
     <div class="status" id="status">Initializing AR...</div>
+    
+    <div class="loading-screen" id="loading-screen">
+        <h2>Loading AR Experience</h2>
+        <p id="loading-text">Initializing camera...</p>
+        <div class="loading-bar">
+            <div class="loading-progress" id="loading-progress"></div>
+        </div>
+    </div>
     
     <div class="buttons">
         <button class="btn" id="place-btn">Place Model</button>
@@ -109,211 +123,125 @@
         <button class="btn" id="rotate-left">↺ Rotate Left</button>
         <button class="btn" id="rotate-right">↻ Rotate Right</button>
     </div>
-
-    <div class="error-message" id="error-message">
-        <h2>AR Not Available</h2>
-        <p id="error-details">WebXR AR is not supported on this device or browser.</p>
-        <p>Please try using a compatible device and browser:</p>
-        <ul style="text-align: left;">
-            <li>Android: Chrome, Samsung Internet</li>
-            <li>iOS: Safari (iOS 13+)</li>
-        </ul>
-        <button class="btn" id="try-anyway-btn">Try Anyway</button>
-    </div>
+    
+    <!-- A-Frame scene -->
+    <a-scene 
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
+        renderer="logarithmicDepthBuffer: true;"
+        vr-mode-ui="enabled: false"
+        id="scene">
+        
+        <!-- Camera with user interaction -->
+        <a-entity camera></a-entity>
+        
+        <!-- Invisible marker for ground placement -->
+        <a-entity id="model-container" visible="false">
+            <a-entity 
+                id="model" 
+                gltf-model="assets/cube.gltf"
+                scale="0.2 0.2 0.2"
+                rotation="0 0 0"
+                position="0 0 0">
+            </a-entity>
+        </a-entity>
+    </a-scene>
 
     <script>
-        // Global variables
-        let container;
-        let camera, scene, renderer;
-        let controller;
-        let reticle;
-        let hitTestSource = null;
-        let hitTestSourceRequested = false;
-        let modelPlaced = false;
-        let currentRotation = 0;
-        let modelContainer = null;
-        let model = null;
-        
         // DOM elements
         const placeButton = document.getElementById('place-btn');
         const rotateLeftButton = document.getElementById('rotate-left');
         const rotateRightButton = document.getElementById('rotate-right');
         const rotationControls = document.querySelector('.rotation-controls');
         const statusElement = document.getElementById('status');
-        const errorMessage = document.getElementById('error-message');
-        const errorDetails = document.getElementById('error-details');
-        const tryAnywayButton = document.getElementById('try-anyway-btn');
+        const loadingScreen = document.getElementById('loading-screen');
+        const loadingText = document.getElementById('loading-text');
+        const loadingProgress = document.getElementById('loading-progress');
         
-        // Check if WebXR is supported
-        if (navigator.xr) {
-            navigator.xr.isSessionSupported('immersive-ar')
-                .then(supported => {
-                    if (supported) {
-                        // Initialize the AR experience
-                        init();
-                    } else {
-                        showError("Your browser supports WebXR, but immersive-ar mode is not available.");
-                    }
-                })
-                .catch(err => {
-                    showError("Error checking AR support: " + err.message);
-                });
-        } else {
-            showError("WebXR is not supported in this browser.");
-        }
+        // Global variables
+        let modelPlaced = false;
+        let currentRotation = 0;
+        let modelContainer = document.getElementById('model-container');
+        let model = document.getElementById('model');
+        let touchStartX = 0;
+        let touchStartY = 0;
+        let modelPosition = { x: 0, y: 0, z: -1 };
         
-        function showError(message) {
-            statusElement.textContent = "AR not available";
-            errorDetails.textContent = message;
-            errorMessage.style.display = "block";
-        }
-        
-        // Try anyway button
-        tryAnywayButton.addEventListener('click', function() {
-            errorMessage.style.display = "none";
-            init();
-        });
+        // Initialize the AR experience
+        window.addEventListener('load', init);
         
         function init() {
-            container = document.getElementById('canvas');
+            // Show loading screen
+            updateLoadingProgress(10, "Initializing AR.js...");
             
-            // Create scene
-            scene = new THREE.Scene();
+            // Wait for camera to be ready
+            const scene = document.querySelector('a-scene');
             
-            // Setup camera
-            camera = new THREE.PerspectiveCamera(70, window.innerWidth / window.innerHeight, 0.01, 20);
-            
-            // Setup lighting
-            const light = new THREE.HemisphereLight(0xffffff, 0xbbbbff, 1);
-            light.position.set(0.5, 1, 0.25);
-            scene.add(light);
-            
-            // Setup renderer
-            renderer = new THREE.WebGLRenderer({
-                antialias: true,
-                alpha: true,
-                canvas: container
+            scene.addEventListener('loaded', function() {
+                updateLoadingProgress(50, "Camera initialized");
+                
+                // Load model
+                model.addEventListener('model-loaded', function() {
+                    updateLoadingProgress(90, "Model loaded");
+                    
+                    // Hide loading screen after a short delay
+                    setTimeout(function() {
+                        loadingScreen.style.display = 'none';
+                        statusElement.textContent = "Point at a surface and tap 'Place Model'";
+                    }, 1000);
+                });
+                
+                // Handle model loading error
+                model.addEventListener('model-error', function() {
+                    updateLoadingProgress(100, "Error loading model");
+                    loadingText.textContent = "Error loading 3D model. Please refresh the page.";
+                });
             });
-            renderer.setPixelRatio(window.devicePixelRatio);
-            renderer.setSize(window.innerWidth, window.innerHeight);
-            renderer.xr.enabled = true;
-            
-            // Create reticle for placement
-            reticle = new THREE.Mesh(
-                new THREE.RingGeometry(0.15, 0.2, 32).rotateX(-Math.PI / 2),
-                new THREE.MeshBasicMaterial()
-            );
-            reticle.matrixAutoUpdate = false;
-            reticle.visible = false;
-            scene.add(reticle);
-            
-            // Create model container
-            modelContainer = new THREE.Group();
-            scene.add(modelContainer);
-            
-            // Load the 3D model
-            const loader = new THREE.GLTFLoader();
-            loader.load('assets/cube.gltf', 
-                // Success callback
-                function(gltf) {
-                    model = gltf.scene;
-                    model.scale.set(0.2, 0.2, 0.2);
-                    model.rotation.set(0, 0, 0);
-                    model.visible = false;
-                    modelContainer.add(model);
-                    
-                    statusElement.textContent = "Model loaded - Waiting for AR session";
-                    
-                    // Start AR session after model is loaded
-                    startARSession();
-                },
-                // Progress callback
-                function(xhr) {
-                    statusElement.textContent = "Loading model: " + Math.floor(xhr.loaded / xhr.total * 100) + "%";
-                },
-                // Error callback
-                function(error) {
-                    statusElement.textContent = "Error loading model";
-                    console.error("Error loading model:", error);
-                }
-            );
-            
-            // Handle window resize
-            window.addEventListener('resize', onWindowResize);
             
             // Button event listeners
             placeButton.addEventListener('click', placeModel);
             rotateLeftButton.addEventListener('click', rotateModelLeft);
             rotateRightButton.addEventListener('click', rotateModelRight);
+            
+            // Touch events for moving the model
+            document.addEventListener('touchstart', onTouchStart);
+            document.addEventListener('touchmove', onTouchMove);
         }
         
-        function startARSession() {
-            // Setup AR session
-            const sessionInit = {
-                requiredFeatures: ['hit-test'],
-                optionalFeatures: ['dom-overlay'],
-                domOverlay: { root: document.body }
-            };
-            
-            navigator.xr.requestSession('immersive-ar', sessionInit)
-                .then(onSessionStarted)
-                .catch(error => {
-                    showError("Failed to start AR session: " + error.message);
-                });
-        }
-        
-        function onSessionStarted(session) {
-            session.addEventListener('end', onSessionEnded);
-            
-            renderer.xr.setReferenceSpaceType('local');
-            renderer.xr.setSession(session);
-            
-            statusElement.textContent = "AR session started - Looking for surfaces";
-            
-            // Setup controller for hit-testing
-            controller = renderer.xr.getController(0);
-            scene.add(controller);
-            
-            // Start rendering loop
-            renderer.setAnimationLoop(render);
-        }
-        
-        function onSessionEnded() {
-            statusElement.textContent = "AR session ended";
-            renderer.setAnimationLoop(null);
-        }
-        
-        function onWindowResize() {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
+        function updateLoadingProgress(percent, message) {
+            loadingProgress.style.width = percent + '%';
+            loadingText.textContent = message;
         }
         
         function placeModel() {
-            if (!modelPlaced && reticle.visible) {
-                // Copy reticle position to model
-                modelContainer.position.setFromMatrixPosition(reticle.matrix);
-                modelContainer.quaternion.setFromRotationMatrix(reticle.matrix);
-                
+            if (!modelPlaced) {
                 // Make model visible
-                if (model) {
-                    model.visible = true;
-                    
-                    // Change button text and show rotation controls
-                    placeButton.textContent = 'Reset Model';
-                    rotationControls.style.display = 'flex';
-                    statusElement.textContent = "Model placed - You can walk around it";
-                    modelPlaced = true;
-                    
-                    // Hide reticle after placement
-                    reticle.visible = false;
-                }
-            } else if (modelPlaced) {
+                modelContainer.setAttribute('visible', 'true');
+                
+                // Position in front of camera
+                const camera = document.querySelector('[camera]');
+                const cameraPosition = camera.getAttribute('position');
+                const cameraRotation = camera.getAttribute('rotation');
+                
+                // Calculate position 1 meter in front of the camera
+                const radians = THREE.MathUtils.degToRad(cameraRotation.y);
+                modelPosition = {
+                    x: cameraPosition.x - Math.sin(radians),
+                    y: cameraPosition.y - 0.5, // Slightly below camera
+                    z: cameraPosition.z - Math.cos(radians)
+                };
+                
+                modelContainer.setAttribute('position', modelPosition);
+                
+                // Change button text and show rotation controls
+                placeButton.textContent = 'Reset Model';
+                rotationControls.style.display = 'flex';
+                statusElement.textContent = "Model placed - You can move around it";
+                modelPlaced = true;
+            } else {
                 // Reset model
-                if (model) {
-                    model.visible = false;
-                    model.rotation.set(0, 0, 0);
-                }
+                modelContainer.setAttribute('visible', 'false');
+                model.setAttribute('rotation', '0 0 0');
                 
                 // Change button text and hide rotation controls
                 placeButton.textContent = 'Place Model';
@@ -321,70 +249,49 @@
                 statusElement.textContent = "Point at a surface and tap 'Place Model'";
                 modelPlaced = false;
                 currentRotation = 0;
-                
-                // Show reticle again
-                reticle.visible = true;
             }
         }
         
         function rotateModelLeft() {
-            if (modelPlaced && model) {
-                currentRotation -= Math.PI / 12; // 15 degrees
-                model.rotation.y = currentRotation;
+            if (modelPlaced) {
+                currentRotation -= 15; // 15 degrees
+                model.setAttribute('rotation', `0 ${currentRotation} 0`);
             }
         }
         
         function rotateModelRight() {
-            if (modelPlaced && model) {
-                currentRotation += Math.PI / 12; // 15 degrees
-                model.rotation.y = currentRotation;
+            if (modelPlaced) {
+                currentRotation += 15; // 15 degrees
+                model.setAttribute('rotation', `0 ${currentRotation} 0`);
             }
         }
         
-        function render(timestamp, frame) {
-            if (frame) {
-                const referenceSpace = renderer.xr.getReferenceSpace();
-                const session = renderer.xr.getSession();
-                
-                if (hitTestSourceRequested === false) {
-                    session.requestReferenceSpace('viewer').then(function(referenceSpace) {
-                        session.requestHitTestSource({ space: referenceSpace }).then(function(source) {
-                            hitTestSource = source;
-                        });
-                    });
-                    
-                    session.addEventListener('end', function() {
-                        hitTestSourceRequested = false;
-                        hitTestSource = null;
-                    });
-                    
-                    hitTestSourceRequested = true;
-                }
-                
-                if (hitTestSource && !modelPlaced) {
-                    const hitTestResults = frame.getHitTestResults(hitTestSource);
-                    
-                    if (hitTestResults.length) {
-                        const hit = hitTestResults[0];
-                        const pose = hit.getPose(referenceSpace);
-                        
-                        reticle.visible = true;
-                        reticle.matrix.fromArray(pose.transform.matrix);
-                        
-                        if (statusElement.textContent === "AR session started - Looking for surfaces") {
-                            statusElement.textContent = "Surface found - Tap 'Place Model'";
-                        }
-                    } else {
-                        reticle.visible = false;
-                        
-                        if (statusElement.textContent === "Surface found - Tap 'Place Model'") {
-                            statusElement.textContent = "Looking for surfaces...";
-                        }
-                    }
-                }
+        function onTouchStart(event) {
+            if (modelPlaced && event.touches.length === 1) {
+                touchStartX = event.touches[0].pageX;
+                touchStartY = event.touches[0].pageY;
             }
-            
-            renderer.render(scene, camera);
+        }
+        
+        function onTouchMove(event) {
+            if (modelPlaced && event.touches.length === 1) {
+                // Calculate touch movement
+                const touchX = event.touches[0].pageX;
+                const touchY = event.touches[0].pageY;
+                
+                const deltaX = (touchX - touchStartX) * 0.01;
+                const deltaZ = (touchY - touchStartY) * 0.01;
+                
+                // Update model position
+                modelPosition.x += deltaX;
+                modelPosition.z += deltaZ;
+                
+                modelContainer.setAttribute('position', modelPosition);
+                
+                // Update touch start position
+                touchStartX = touchX;
+                touchStartY = touchY;
+            }
         }
     </script>
 </body>
