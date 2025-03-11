@@ -4,9 +4,9 @@
     <meta charset='utf-8'>
     <meta http-equiv='X-UA-Compatible' content='IE=edge'>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AR.js - Fixed Model v1.1</title>
+    <title>AR.js - Fixed Model v1.2</title>
     <script src='https://aframe.io/releases/1.3.0/aframe.min.js'></script>
-    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar.js"></script>
+    <script src="https://raw.githack.com/AR-js-org/AR.js/master/aframe/build/aframe-ar-nft.js"></script>
     <script src="https://raw.githack.com/donmccurdy/aframe-extras/master/dist/aframe-extras.loaders.min.js"></script>
     <style>
         .buttons {
@@ -51,22 +51,37 @@
             padding: 10px 0;
             z-index: 10;
         }
+        .status {
+            position: absolute;
+            top: 40px;
+            left: 0;
+            width: 100%;
+            text-align: center;
+            color: white;
+            font-family: Arial, sans-serif;
+            font-size: 14px;
+            background-color: rgba(0, 0, 0, 0.3);
+            padding: 5px 0;
+            z-index: 10;
+        }
     </style>
 </head>
 
 <body style='margin: 0; overflow: hidden;'>
-    <div class="title">AR.js - Fixed Model v1.1</div>
+    <div class="title">AR.js - Fixed Model v1.2</div>
+    <div class="status" id="status">Initializing AR...</div>
+    
     <a-scene
         vr-mode-ui="enabled: false"
         embedded
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; trackingMethod: best;"
+        arjs="sourceType: webcam; debugUIEnabled: false; trackingMethod: best;"
         renderer="logarithmicDepthBuffer: true;">
         
         <a-assets>
             <a-asset-item id="cube-model" src="assets/cube.gltf"></a-asset-item>
         </a-assets>
         
-        <!-- This will be our fixed model in space -->
+        <!-- This will be our fixed model in world space -->
         <a-entity id="model-container" visible="false">
             <a-entity 
                 id="placed-model" 
@@ -77,7 +92,7 @@
             </a-entity>
         </a-entity>
         
-        <a-entity camera look-controls></a-entity>
+        <a-camera id="camera" position="0 0 0" look-controls wasd-controls="enabled: false"></a-camera>
     </a-scene>
     
     <div class="buttons">
@@ -97,31 +112,44 @@
             const rotateLeftButton = document.querySelector('#rotate-left');
             const rotateRightButton = document.querySelector('#rotate-right');
             const rotationControls = document.querySelector('.rotation-controls');
+            const statusElement = document.querySelector('#status');
             
             let modelPlaced = false;
             let currentRotation = 0;
             
-            // Place model in fixed position in AR space
+            // Update status when AR is ready
+            const scene = document.querySelector('a-scene');
+            scene.addEventListener('loaded', function () {
+                statusElement.textContent = "AR Ready - Point at a surface and tap 'Place Model'";
+            });
+            
+            // Place model in fixed position in AR world space
             placeButton.addEventListener('click', function() {
                 if (!modelPlaced) {
-                    // Get the camera position and rotation
-                    const camera = document.querySelector('[camera]');
-                    const cameraPosition = camera.object3D.position;
-                    const cameraDirection = new THREE.Vector3(0, 0, -1);
-                    cameraDirection.applyQuaternion(camera.object3D.quaternion);
+                    // Get the camera
+                    const camera = document.querySelector('#camera');
                     
-                    // Position the model 2 meters in front of the camera's current position
-                    const modelPosition = new THREE.Vector3().copy(cameraPosition).add(
-                        cameraDirection.multiplyScalar(2)
-                    );
+                    // Create a position in front of the camera
+                    // This will be fixed in world space, not relative to camera
+                    const worldPosition = new THREE.Vector3();
+                    const worldDirection = new THREE.Vector3();
                     
-                    // Set the model container position to fix it in world space
-                    modelContainer.setAttribute('position', `${modelPosition.x} ${modelPosition.y} ${modelPosition.z}`);
+                    // Get camera world position and direction
+                    camera.object3D.getWorldPosition(worldPosition);
+                    camera.object3D.getWorldDirection(worldDirection);
+                    
+                    // Calculate position 2 meters in front of camera
+                    worldDirection.multiplyScalar(-2); // Negative because getWorldDirection points in -Z
+                    worldPosition.add(worldDirection);
+                    
+                    // Set the model container position in world space
+                    modelContainer.setAttribute('position', worldPosition);
                     modelContainer.setAttribute('visible', 'true');
                     
                     // Change button text and show rotation controls
                     placeButton.textContent = 'Reset Model';
                     rotationControls.style.display = 'flex';
+                    statusElement.textContent = "Model placed - You can walk around it";
                     modelPlaced = true;
                 } else {
                     // Reset model position
@@ -132,6 +160,7 @@
                     // Change button text and hide rotation controls
                     placeButton.textContent = 'Place Model';
                     rotationControls.style.display = 'none';
+                    statusElement.textContent = "AR Ready - Point at a surface and tap 'Place Model'";
                     modelPlaced = false;
                 }
             });
