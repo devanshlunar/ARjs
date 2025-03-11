@@ -4,7 +4,7 @@
     <meta charset='utf-8'>
     <meta http-equiv='X-UA-Compatible' content='IE=edge'>
     <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=no">
-    <title>AR.js - Fixed Model v2.0</title>
+    <title>AR.js - Place Model v3.0</title>
     
     <!-- AR.js and A-Frame libraries -->
     <script src="https://aframe.io/releases/1.3.0/aframe.min.js"></script>
@@ -46,6 +46,7 @@
             display: flex;
             justify-content: center;
             z-index: 10;
+            display: none;
         }
         .title {
             position: absolute;
@@ -71,49 +72,39 @@
             padding: 5px 0;
             z-index: 10;
         }
-        .loading-screen {
-            position: absolute;
-            top: 0;
-            left: 0;
-            width: 100%;
-            height: 100%;
-            background-color: rgba(0, 0, 0, 0.8);
-            display: flex;
-            flex-direction: column;
-            justify-content: center;
-            align-items: center;
-            z-index: 999;
-            color: white;
-        }
-        .loading-bar {
-            width: 80%;
-            max-width: 300px;
-            height: 20px;
-            background-color: #333;
-            border-radius: 10px;
-            margin-top: 20px;
-            overflow: hidden;
-        }
-        .loading-progress {
-            height: 100%;
-            background-color: #4CAF50;
-            width: 0%;
-            transition: width 0.3s;
-        }
     </style>
 </head>
 
-<body>
-    <div class="title">AR.js - Fixed Model v2.0</div>
+<body style="margin: 0; overflow: hidden;">
+    <div class="title">AR.js - Place Model v3.0</div>
     <div class="status" id="status">Initializing AR...</div>
     
-    <div class="loading-screen" id="loading-screen">
-        <h2>Loading AR Experience</h2>
-        <p id="loading-text">Initializing camera...</p>
-        <div class="loading-bar">
-            <div class="loading-progress" id="loading-progress"></div>
-        </div>
-    </div>
+    <!-- A-Frame scene -->
+    <a-scene 
+        embedded
+        arjs="sourceType: webcam; debugUIEnabled: false;"
+        renderer="logarithmicDepthBuffer: true;"
+        vr-mode-ui="enabled: false">
+        
+        <a-assets>
+            <a-asset-item id="cube-model" src="assets/cube.gltf"></a-asset-item>
+        </a-assets>
+        
+        <!-- This will be our fixed model in world space -->
+        <a-entity id="model-anchor" position="0 0 0">
+            <a-entity 
+                id="placed-model" 
+                gltf-model="#cube-model"
+                scale="0.2 0.2 0.2"
+                rotation="0 0 0"
+                position="0 0 0"
+                visible="false">
+            </a-entity>
+        </a-entity>
+        
+        <!-- Camera -->
+        <a-entity camera position="0 1.6 0" look-controls></a-entity>
+    </a-scene>
     
     <div class="buttons">
         <button class="btn" id="place-btn">Place Model</button>
@@ -123,176 +114,91 @@
         <button class="btn" id="rotate-left">↺ Rotate Left</button>
         <button class="btn" id="rotate-right">↻ Rotate Right</button>
     </div>
-    
-    <!-- A-Frame scene -->
-    <a-scene 
-        embedded
-        arjs="sourceType: webcam; debugUIEnabled: false; detectionMode: mono_and_matrix; matrixCodeType: 3x3;"
-        renderer="logarithmicDepthBuffer: true;"
-        vr-mode-ui="enabled: false"
-        id="scene">
-        
-        <!-- Camera with user interaction -->
-        <a-entity camera></a-entity>
-        
-        <!-- Invisible marker for ground placement -->
-        <a-entity id="model-container" visible="false">
-            <a-entity 
-                id="model" 
-                gltf-model="assets/cube.gltf"
-                scale="0.2 0.2 0.2"
-                rotation="0 0 0"
-                position="0 0 0">
-            </a-entity>
-        </a-entity>
-    </a-scene>
 
     <script>
-        // DOM elements
-        const placeButton = document.getElementById('place-btn');
-        const rotateLeftButton = document.getElementById('rotate-left');
-        const rotateRightButton = document.getElementById('rotate-right');
-        const rotationControls = document.querySelector('.rotation-controls');
-        const statusElement = document.getElementById('status');
-        const loadingScreen = document.getElementById('loading-screen');
-        const loadingText = document.getElementById('loading-text');
-        const loadingProgress = document.getElementById('loading-progress');
-        
-        // Global variables
-        let modelPlaced = false;
-        let currentRotation = 0;
-        let modelContainer = document.getElementById('model-container');
-        let model = document.getElementById('model');
-        let touchStartX = 0;
-        let touchStartY = 0;
-        let modelPosition = { x: 0, y: 0, z: -1 };
-        
-        // Initialize the AR experience
-        window.addEventListener('load', init);
-        
-        function init() {
-            // Show loading screen
-            updateLoadingProgress(10, "Initializing AR.js...");
+        // Wait for everything to load
+        window.addEventListener('DOMContentLoaded', function() {
+            // DOM elements
+            const placeButton = document.getElementById('place-btn');
+            const rotateLeftButton = document.getElementById('rotate-left');
+            const rotateRightButton = document.getElementById('rotate-right');
+            const rotationControls = document.querySelector('.rotation-controls');
+            const statusElement = document.getElementById('status');
+            const modelAnchor = document.getElementById('model-anchor');
+            const placedModel = document.getElementById('placed-model');
             
-            // Wait for camera to be ready
+            // Variables
+            let modelPlaced = false;
+            let currentRotation = 0;
+            
+            // Update status when AR is ready
             const scene = document.querySelector('a-scene');
-            
             scene.addEventListener('loaded', function() {
-                updateLoadingProgress(50, "Camera initialized");
-                
-                // Load model
-                model.addEventListener('model-loaded', function() {
-                    updateLoadingProgress(90, "Model loaded");
-                    
-                    // Hide loading screen after a short delay
-                    setTimeout(function() {
-                        loadingScreen.style.display = 'none';
-                        statusElement.textContent = "Point at a surface and tap 'Place Model'";
-                    }, 1000);
-                });
-                
-                // Handle model loading error
-                model.addEventListener('model-error', function() {
-                    updateLoadingProgress(100, "Error loading model");
-                    loadingText.textContent = "Error loading 3D model. Please refresh the page.";
-                });
+                statusElement.textContent = "AR Ready - Tap 'Place Model' to place the cube";
             });
             
-            // Button event listeners
-            placeButton.addEventListener('click', placeModel);
-            rotateLeftButton.addEventListener('click', rotateModelLeft);
-            rotateRightButton.addEventListener('click', rotateModelRight);
+            // Place model button
+            placeButton.addEventListener('click', function() {
+                if (!modelPlaced) {
+                    // Get the camera
+                    const camera = document.querySelector('[camera]');
+                    
+                    // Get camera position and rotation
+                    const cameraPosition = camera.getAttribute('position');
+                    const cameraRotation = camera.getAttribute('rotation');
+                    
+                    // Calculate position in front of the camera
+                    const radians = THREE.Math.degToRad(cameraRotation.y);
+                    const distance = 2; // 2 meters in front
+                    
+                    const x = cameraPosition.x - Math.sin(radians) * distance;
+                    const z = cameraPosition.z - Math.cos(radians) * distance;
+                    
+                    // Position the model anchor in world space
+                    modelAnchor.setAttribute('position', {
+                        x: x,
+                        y: cameraPosition.y - 0.5, // Slightly below eye level
+                        z: z
+                    });
+                    
+                    // Make model visible
+                    placedModel.setAttribute('visible', 'true');
+                    
+                    // Update UI
+                    placeButton.textContent = 'Reset Model';
+                    rotationControls.style.display = 'flex';
+                    statusElement.textContent = "Model placed - You can walk around it";
+                    modelPlaced = true;
+                } else {
+                    // Reset model
+                    placedModel.setAttribute('visible', 'false');
+                    placedModel.setAttribute('rotation', '0 0 0');
+                    currentRotation = 0;
+                    
+                    // Update UI
+                    placeButton.textContent = 'Place Model';
+                    rotationControls.style.display = 'none';
+                    statusElement.textContent = "AR Ready - Tap 'Place Model' to place the cube";
+                    modelPlaced = false;
+                }
+            });
             
-            // Touch events for moving the model
-            document.addEventListener('touchstart', onTouchStart);
-            document.addEventListener('touchmove', onTouchMove);
-        }
-        
-        function updateLoadingProgress(percent, message) {
-            loadingProgress.style.width = percent + '%';
-            loadingText.textContent = message;
-        }
-        
-        function placeModel() {
-            if (!modelPlaced) {
-                // Make model visible
-                modelContainer.setAttribute('visible', 'true');
-                
-                // Position in front of camera
-                const camera = document.querySelector('[camera]');
-                const cameraPosition = camera.getAttribute('position');
-                const cameraRotation = camera.getAttribute('rotation');
-                
-                // Calculate position 1 meter in front of the camera
-                const radians = THREE.MathUtils.degToRad(cameraRotation.y);
-                modelPosition = {
-                    x: cameraPosition.x - Math.sin(radians),
-                    y: cameraPosition.y - 0.5, // Slightly below camera
-                    z: cameraPosition.z - Math.cos(radians)
-                };
-                
-                modelContainer.setAttribute('position', modelPosition);
-                
-                // Change button text and show rotation controls
-                placeButton.textContent = 'Reset Model';
-                rotationControls.style.display = 'flex';
-                statusElement.textContent = "Model placed - You can move around it";
-                modelPlaced = true;
-            } else {
-                // Reset model
-                modelContainer.setAttribute('visible', 'false');
-                model.setAttribute('rotation', '0 0 0');
-                
-                // Change button text and hide rotation controls
-                placeButton.textContent = 'Place Model';
-                rotationControls.style.display = 'none';
-                statusElement.textContent = "Point at a surface and tap 'Place Model'";
-                modelPlaced = false;
-                currentRotation = 0;
-            }
-        }
-        
-        function rotateModelLeft() {
-            if (modelPlaced) {
-                currentRotation -= 15; // 15 degrees
-                model.setAttribute('rotation', `0 ${currentRotation} 0`);
-            }
-        }
-        
-        function rotateModelRight() {
-            if (modelPlaced) {
-                currentRotation += 15; // 15 degrees
-                model.setAttribute('rotation', `0 ${currentRotation} 0`);
-            }
-        }
-        
-        function onTouchStart(event) {
-            if (modelPlaced && event.touches.length === 1) {
-                touchStartX = event.touches[0].pageX;
-                touchStartY = event.touches[0].pageY;
-            }
-        }
-        
-        function onTouchMove(event) {
-            if (modelPlaced && event.touches.length === 1) {
-                // Calculate touch movement
-                const touchX = event.touches[0].pageX;
-                const touchY = event.touches[0].pageY;
-                
-                const deltaX = (touchX - touchStartX) * 0.01;
-                const deltaZ = (touchY - touchStartY) * 0.01;
-                
-                // Update model position
-                modelPosition.x += deltaX;
-                modelPosition.z += deltaZ;
-                
-                modelContainer.setAttribute('position', modelPosition);
-                
-                // Update touch start position
-                touchStartX = touchX;
-                touchStartY = touchY;
-            }
-        }
+            // Rotate model left
+            rotateLeftButton.addEventListener('click', function() {
+                if (modelPlaced) {
+                    currentRotation -= 15;
+                    placedModel.setAttribute('rotation', `0 ${currentRotation} 0`);
+                }
+            });
+            
+            // Rotate model right
+            rotateRightButton.addEventListener('click', function() {
+                if (modelPlaced) {
+                    currentRotation += 15;
+                    placedModel.setAttribute('rotation', `0 ${currentRotation} 0`);
+                }
+            });
+        });
     </script>
 </body>
 </html> 
