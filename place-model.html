@@ -73,6 +73,26 @@
             padding: 5px 0;
             z-index: 10;
         }
+        .error-message {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            background-color: rgba(255, 255, 255, 0.9);
+            padding: 20px;
+            border-radius: 10px;
+            max-width: 80%;
+            text-align: center;
+            box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+            display: none;
+        }
+        .error-message h2 {
+            color: #d32f2f;
+            margin-top: 0;
+        }
+        .error-message p {
+            margin-bottom: 15px;
+        }
     </style>
 </head>
 
@@ -88,6 +108,17 @@
     <div class="rotation-controls">
         <button class="btn" id="rotate-left">↺ Rotate Left</button>
         <button class="btn" id="rotate-right">↻ Rotate Right</button>
+    </div>
+
+    <div class="error-message" id="error-message">
+        <h2>AR Not Available</h2>
+        <p id="error-details">WebXR AR is not supported on this device or browser.</p>
+        <p>Please try using a compatible device and browser:</p>
+        <ul style="text-align: left;">
+            <li>Android: Chrome, Samsung Internet</li>
+            <li>iOS: Safari (iOS 13+)</li>
+        </ul>
+        <button class="btn" id="try-anyway-btn">Try Anyway</button>
     </div>
 
     <script>
@@ -109,9 +140,39 @@
         const rotateRightButton = document.getElementById('rotate-right');
         const rotationControls = document.querySelector('.rotation-controls');
         const statusElement = document.getElementById('status');
+        const errorMessage = document.getElementById('error-message');
+        const errorDetails = document.getElementById('error-details');
+        const tryAnywayButton = document.getElementById('try-anyway-btn');
         
-        // Initialize the AR experience
-        init();
+        // Check if WebXR is supported
+        if (navigator.xr) {
+            navigator.xr.isSessionSupported('immersive-ar')
+                .then(supported => {
+                    if (supported) {
+                        // Initialize the AR experience
+                        init();
+                    } else {
+                        showError("Your browser supports WebXR, but immersive-ar mode is not available.");
+                    }
+                })
+                .catch(err => {
+                    showError("Error checking AR support: " + err.message);
+                });
+        } else {
+            showError("WebXR is not supported in this browser.");
+        }
+        
+        function showError(message) {
+            statusElement.textContent = "AR not available";
+            errorDetails.textContent = message;
+            errorMessage.style.display = "block";
+        }
+        
+        // Try anyway button
+        tryAnywayButton.addEventListener('click', function() {
+            errorMessage.style.display = "none";
+            init();
+        });
         
         function init() {
             container = document.getElementById('canvas');
@@ -152,16 +213,41 @@
             
             // Load the 3D model
             const loader = new THREE.GLTFLoader();
-            loader.load('assets/cube.gltf', function(gltf) {
-                model = gltf.scene;
-                model.scale.set(0.2, 0.2, 0.2);
-                model.rotation.set(0, 0, 0);
-                model.visible = false;
-                modelContainer.add(model);
-                
-                statusElement.textContent = "Model loaded - Waiting for AR session";
-            });
+            loader.load('assets/cube.gltf', 
+                // Success callback
+                function(gltf) {
+                    model = gltf.scene;
+                    model.scale.set(0.2, 0.2, 0.2);
+                    model.rotation.set(0, 0, 0);
+                    model.visible = false;
+                    modelContainer.add(model);
+                    
+                    statusElement.textContent = "Model loaded - Waiting for AR session";
+                    
+                    // Start AR session after model is loaded
+                    startARSession();
+                },
+                // Progress callback
+                function(xhr) {
+                    statusElement.textContent = "Loading model: " + Math.floor(xhr.loaded / xhr.total * 100) + "%";
+                },
+                // Error callback
+                function(error) {
+                    statusElement.textContent = "Error loading model";
+                    console.error("Error loading model:", error);
+                }
+            );
             
+            // Handle window resize
+            window.addEventListener('resize', onWindowResize);
+            
+            // Button event listeners
+            placeButton.addEventListener('click', placeModel);
+            rotateLeftButton.addEventListener('click', rotateModelLeft);
+            rotateRightButton.addEventListener('click', rotateModelRight);
+        }
+        
+        function startARSession() {
             // Setup AR session
             const sessionInit = {
                 requiredFeatures: ['hit-test'],
@@ -172,16 +258,8 @@
             navigator.xr.requestSession('immersive-ar', sessionInit)
                 .then(onSessionStarted)
                 .catch(error => {
-                    statusElement.textContent = "WebXR AR not supported: " + error.message;
+                    showError("Failed to start AR session: " + error.message);
                 });
-                
-            // Handle window resize
-            window.addEventListener('resize', onWindowResize);
-            
-            // Button event listeners
-            placeButton.addEventListener('click', placeModel);
-            rotateLeftButton.addEventListener('click', rotateModelLeft);
-            rotateRightButton.addEventListener('click', rotateModelRight);
         }
         
         function onSessionStarted(session) {
